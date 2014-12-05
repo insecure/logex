@@ -16,7 +16,7 @@ setup(
 	url='https://github.com/insecure/logex',
 	author='Tobias Hommel',
 	author_email='software@genoetigt.de',
-    long_description=read('README.md'),
+    long_description=read('README.rst'),
     py_modules=['logex'],
     include_package_data=True,
     license='BSD',
