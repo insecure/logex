@@ -47,71 +47,129 @@ import traceback
 import functools
 import sys
 
-__version__ = '1.0.0'
+__version__ = '2.0.0'
 
 LOGFUNCTION = logging.error
-TEMPLATE = ('Unhandled exception in %(module)s::%(funcname)s(%(args)s'
-					', %(kwargs)s):\n%(traceback)s\n%(source)s\n%(locals)s')
+TEMPLATE = ('Unhandled exception calling %(funcname)s(%(argsview)s):\n'
+			'%(traceback)s\n'
+			'%(sourceview)s')
 ADVANCED = False
 LAZY = False
 RERAISE = True
 CATCHALL = False
 VIEW_SOURCE = False
-LINE_NUMBERS = True
 
-def _generate_source_view(filename, lineno, sourcelines, crashline=None, line_numbers=LINE_NUMBERS):
-	source_view = ['----- sourcecode [%s(%s)] -----' % (filename, lineno)]
-	if line_numbers:
+def _generate_source_view(tb):
+	source_view = ['========== sourcecode ==========']
+	while tb is not None:
+		crashed_frame = tb.tb_frame
+		crashed_line = crashed_frame.f_lineno
+		try:
+			filename = inspect.getsourcefile(crashed_frame)
+		except TypeError:
+			filename = '<UNKNOWN>'
+		crashed_name = crashed_frame.f_code.co_name
+		file_header = '-- %s: %s --' % (filename, crashed_name)
+		frame_line = '-'*len(file_header)
+		source_view.append(frame_line)
+		source_view.append(file_header)
+		source_view.append(frame_line)
+		try:
+			sourcelines, lineno = inspect.getsourcelines(crashed_frame)
+			del crashed_frame
+		except IOError:
+			sourcelines = []
+			lineno = -1
 		number_len = len(str(lineno+len(sourcelines)))
+		last = False
 		for number, line in enumerate(sourcelines, lineno):
-			if number == crashline:
-				source_view.append('%*s--> %s' % (number_len, number, line[:-1]))
+			if number == crashed_line:
+				source_view.append('%*s-->%s' % (number_len, number, line[:-1]))
+				last = True
 			else:
-				source_view.append('%*s    %s' % (number_len, number, line[:-1]))
-	else:
-		source_view.append(''.join(sourcelines))
-	source_view.append('-'*len(source_view[0]))
+				if last:
+					source_view.append('...')
+					break
+				source_view.append('%*s   %s' % (number_len, number, line[:-1]))
+		source_view.append('')
+		locals_view = _generate_locals_view(tb.tb_frame)
+		if locals_view != '':
+			source_view.extend(['Locals when executing line %s:' % crashed_line, locals_view, ''])
+		tb = tb.tb_next
+	source_view.append('='*len(source_view[0]))
 	return '\n'.join(source_view)
 
 def _generate_locals_view(frame):
 	arginfo = inspect.getargvalues(frame)
-	frame_locals = (['----- locals -----'] +
-					['* %s: %s' % item for item in sorted(arginfo.locals.items())] +
-					['------------------'])
+	frame_locals = ['* %s: %r' % item for item in sorted(arginfo.locals.items())]
 	return '\n'.join(frame_locals)
 
-def _generate_log_message(template, wrapped_f, args, kwargs, frame, crashline=None, view_source=VIEW_SOURCE, line_numbers=LINE_NUMBERS):
-	try:
-		locals_view = _generate_locals_view(frame)
-	except Exception:
-		locals_view = traceback.format_exc()
-	try:
-		sourcelines, lineno = inspect.getsourcelines(wrapped_f)
-	except IOError:
-		sourcelines = []
-		lineno = -1
-	try:
-		filename = inspect.getsourcefile(wrapped_f)
-	except TypeError:
-		filename = '<builtin>'
+def _generate_args_view(args, kwargs):
+	view = ', '.join([repr(arg) for arg in args])
+	if kwargs != {}:
+		view += ', ' + ', '.join(['%s=%r' % (k, v) for k, v in kwargs.items()])
+	return view
+
+
+def is_method_of(func_code, some_object):
+	attr = getattr(some_object, func_code.co_name, None)
+	if attr is None:
+		return False
+	else:
+		return inspect.ismethod(attr)
+
+def _generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
+	type_, value_, tb_ = exc
+	func_code = tb_.tb_frame.f_code
+	func_name = func_code.co_name
 	if view_source:
-		source = _generate_source_view(filename, lineno, sourcelines, crashline=crashline, line_numbers=line_numbers)+'\n'
+		try:
+			source = _generate_source_view(tb_)
+		except Exception:
+			source = 'Error generating source view:\n%s' % traceback.format_exc()
 	else:
 		source = ''
+	if is_method_of(func_code, args[0]):
+		func_name = '%s.%s' % (args[0].__class__.__name__, func_name)
+		argsview = _generate_args_view(args[1:], kwargs)
+	else:
+		argsview = _generate_args_view(args, kwargs)
 	return template % {
-		'traceback': traceback.format_exc(),
-		'funcname': wrapped_f.__name__,
-		'module': wrapped_f.__module__,
+		'traceback': ''.join(traceback.format_exception(type_, value_, tb_)),
+		'funcname': func_name,
 		'args': args,
 		'kwargs': kwargs,
-		'source': source,
-		'locals': locals_view
+		'argsview': argsview,
+		'sourceview': source
 	}
 
+def _handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, view_source, reraise, strip=1):
+	# noinspection PyBroadException
+	try:
+		logf = logfunction() if lazy else logfunction
+		type_, value_, tb_ = sys.exc_info()
+		for i in range(strip):
+			if tb_.tb_next is None:
+				break
+			tb_ = tb_.tb_next
+		if advanced:
+			logf(template, args, kwargs, (type_, value_, tb_),
+				 view_source=view_source)
+		else:
+			logf(_generate_log_message(
+				template, args, kwargs, (type_, value_, tb_),
+				view_source=view_source))
+	except Exception:
+		traceback.print_exc()
+		pass #TODO: any sane way to report this? logging/print is not generic enough
+	if reraise:
+		# noinspection PyCompatibility
+		raise
 
+#TODO: document parameters to logfunction
 def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 		template=TEMPLATE, reraise=RERAISE, catchall=CATCHALL,
-		view_source=VIEW_SOURCE, line_numbers=LINE_NUMBERS):
+		view_source=VIEW_SOURCE):
 	'''Decorator function that logs all unhandled exceptions in a function.
 	This is especially useful for thread functions in a daemon or functions which are used as D-Bus signal handlers.
 
@@ -122,13 +180,13 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 	:type lazy: bool
 	:param advanced: if True, pass the details to `function`, if False only pass the generated message to `function`
 	:type advanced: bool
-	:param template: The message to be logged. The following place holders will be replaced in the message:
+	:param template: If `advanced` is False, the message to be logged. The following place holders will be replaced:
 		- %(traceback)s: the traceback to the exception
 		- %(funcname)s: the name of the function in which the exception occurred
-		- %(module)s: the name of the module containing the function
 		- %(args)s: the arguments to the function
 		- %(kwargs)s: the keyword arguments to the function
-		- %(source)s: the source code of the function
+		- %(argsview)s: args and kwargs in one line, separated by ', ' and kwargs in key=value form
+		- %(sourceview)s: the source code of the function
 	:type template: str
 	:param reraise: If set to False, do not re-raise the exception, but only log it. default: True
 	:type reraise: bool
@@ -137,33 +195,7 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 	:type catchall: bool
 	:param view_source: if True, include the source code of the failed function if possible
 	:type view_source: bool
-	:param line_numbers: if True, print line numbers in the source view
-	:type line_numbers: bool
 	'''
-	def _handle_log_exception(args, kwargs):
-		# noinspection PyBroadException
-		try:
-			logf = logfunction() if lazy else logfunction
-			traceback_ = sys.exc_info()[2]
-			while traceback_.tb_next is not None:
-				traceback_ = traceback_.tb_next
-			frame = traceback_.tb_frame
-			crashline = traceback_.tb_lineno
-			del traceback_
-			if advanced:
-				logf(template, wrapped_f, args, kwargs, frame,
-					 crashline=crashline,
-					 view_source=view_source, line_numbers=line_numbers)
-			else:
-				logf(_generate_log_message(template, wrapped_f, args, kwargs, frame,
-										   crashline=crashline,
-										   view_source=view_source, line_numbers=line_numbers))
-			del frame
-		except Exception:
-			pass #TODO: any sane way to report this? logging/print is not generic enough
-		if reraise:
-			raise
-
 	if wrapped_f is not None:
 		if catchall:
 			# noinspection PyBroadException,PyDocstring
@@ -171,19 +203,20 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 				try:
 					wrapped_f(*args, **kwargs)
 				except:
-					_handle_log_exception(args, kwargs)
+					_handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, view_source, reraise)
 		else:
 			# noinspection PyBroadException,PyDocstring
 			def wrapper_f(*args, **kwargs):
 				try:
 					wrapped_f(*args, **kwargs)
 				except Exception:
-					_handle_log_exception(args, kwargs)
+					_handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, view_source, reraise)
 		return functools.update_wrapper(wrapper_f, wrapped_f)
 	else:
 		# noinspection PyDocstring
 		def arg_wrapper(wrapped_fn):
 			return log(wrapped_fn,
 					   logfunction=logfunction, lazy=lazy, advanced=advanced,
-					   template=template, reraise=reraise, catchall=catchall, view_source=view_source)
+					   template=template, reraise=reraise, catchall=catchall,
+					   view_source=view_source)
 		return arg_wrapper
