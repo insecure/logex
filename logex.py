@@ -60,6 +60,19 @@ CATCHALL = False
 VIEW_SOURCE = False
 
 def _generate_source_view(tb):
+	"""Generate a view showing the source code for all frames in a given traceback.
+	The view contains the following information for every frame in the traceback:
+	 * the name of the current function
+	 * the file name containing the source code of the current function
+	 * the source code of the current function (the source code is only shown up to the current line)
+	 * line numbers
+	 * an indicator "-->" for the current line of the frame
+	 * a list of locals
+
+	:param tb: a traceback object (e.g. from sys.exc_info()[2])
+	:type tb: types.TracebackType
+	:rtype: str
+	"""
 	source_view = ['========== sourcecode ==========']
 	while tb is not None:
 		crashed_frame = tb.tb_frame
@@ -68,29 +81,27 @@ def _generate_source_view(tb):
 			filename = inspect.getsourcefile(crashed_frame)
 		except TypeError:
 			filename = '<UNKNOWN>'
-		crashed_name = crashed_frame.f_code.co_name
-		file_header = '-- %s: %s --' % (filename, crashed_name)
+		file_header = '-- %s: %s --' % (filename, crashed_frame.f_code.co_name)
 		frame_line = '-'*len(file_header)
-		source_view.append(frame_line)
-		source_view.append(file_header)
-		source_view.append(frame_line)
+		source_view.extend([frame_line,
+							file_header,
+							frame_line])
 		try:
 			sourcelines, lineno = inspect.getsourcelines(crashed_frame)
 			del crashed_frame
 		except IOError:
 			sourcelines = []
 			lineno = -1
-		number_len = len(str(lineno+len(sourcelines)))
 		last = False
 		for number, line in enumerate(sourcelines, lineno):
 			if number == crashed_line:
-				source_view.append('%*s-->%s' % (number_len, number, line[:-1]))
+				source_view.append('%5s-->%s' % (number, line[:-1]))
 				last = True
 			else:
 				if last:
 					source_view.append('...')
 					break
-				source_view.append('%*s   %s' % (number_len, number, line[:-1]))
+				source_view.append('%5s   %s' % (number, line[:-1]))
 		source_view.append('')
 		locals_view = _generate_locals_view(tb.tb_frame)
 		if locals_view != '':
@@ -105,23 +116,56 @@ def _generate_locals_view(frame):
 	return '\n'.join(frame_locals)
 
 def _generate_args_view(args, kwargs):
+	"""Generate a string representing the arguments given.
+	All arguments and keyword arguments are separated by ", ".
+	All keyword arguments are in the form name=value.
+
+	:param args: a tuple containing the arguments
+	:type args: tuple
+	:param kwargs: a dict containing key/value pairs for all keyword arguments
+	:type kwargs: dict
+	:rtype: str
+	"""
 	view = ', '.join([repr(arg) for arg in args])
 	if kwargs != {}:
 		view += ', ' + ', '.join(['%s=%r' % (k, v) for k, v in kwargs.items()])
 	return view
 
+def _is_method_of(func_name, class_object):
+	"""Check if a given class object has a method of a given name.
 
-def is_method_of(func_code, some_object):
-	attr = getattr(some_object, func_code.co_name, None)
+	:param func_name: the name of the method to be checked for
+	:param class_object: the instance of the class
+	:rtype: bool
+	"""
+	attr = getattr(class_object, func_name, None)
 	if attr is None:
 		return False
 	else:
 		return inspect.ismethod(attr)
 
-def _generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
+def generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
+	"""Generate a message based on a given template.
+
+	:param template: a template for the returned message, the following place holders will be replaced:
+		- %(traceback)s: the traceback to the exception
+		- %(funcname)s: the name of the function in which the exception occurred
+		- %(args)s: the arguments to the function
+		- %(kwargs)s: the keyword arguments to the function
+		- %(argsview)s: args and kwargs in one line, separated by ', ' and kwargs in key=value form
+		- %(sourceview)s: the source code of the function
+	:type template: str
+	:param args: the arguments to the top function of the traceback
+	:type args: tuple
+	:param kwargs: the keyword arguments to the top function of the traceback
+	:type kwargs: dict
+	:param exc: a (type, value, traceback) tuple as returned by sys.exc_info()
+	:param view_source: if True, add a view for the source code of every relevant function in the exception traceback
+	:type view_source: bool
+	:rtype: str
+	"""
 	type_, value_, tb_ = exc
-	func_code = tb_.tb_frame.f_code
-	func_name = func_code.co_name
+	func_name = tb_.tb_frame.f_code.co_name
 	if view_source:
 		try:
 			source = _generate_source_view(tb_)
@@ -129,7 +173,7 @@ def _generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
 			source = 'Error generating source view:\n%s' % traceback.format_exc()
 	else:
 		source = ''
-	if is_method_of(func_code, args[0]):
+	if _is_method_of(func_name, args[0]):
 		func_name = '%s.%s' % (args[0].__class__.__name__, func_name)
 		argsview = _generate_args_view(args[1:], kwargs)
 	else:
@@ -156,7 +200,7 @@ def _handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, v
 			logf(template, args, kwargs, (type_, value_, tb_),
 				 view_source=view_source)
 		else:
-			logf(_generate_log_message(
+			logf(generate_log_message(
 				template, args, kwargs, (type_, value_, tb_),
 				view_source=view_source))
 	except Exception:
@@ -166,27 +210,24 @@ def _handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, v
 		# noinspection PyCompatibility
 		raise
 
-#TODO: document parameters to logfunction
 def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 		template=TEMPLATE, reraise=RERAISE, catchall=CATCHALL,
 		view_source=VIEW_SOURCE):
-	'''Decorator function that logs all unhandled exceptions in a function.
+	"""Decorator function that logs all unhandled exceptions in a function.
 	This is especially useful for thread functions in a daemon or functions which are used as D-Bus signal handlers.
 
-	:param wrapped_f: the decorated function(ignore when using @-syntax)
-	:param logfunction: the logging function or a function returning a logging function (depending on `lazy` parameter)
+	:param wrapped_f: The decorated function(ignore when using @-syntax).
+	:param logfunction: The logging function or a function returning a logging function (depending on `lazy` parameter).
+	The parameters given to this function depend on the `advanced` parameter.
+	If `advanced` is False, a string with a message string is passed.
+	If `advanced` is True, the same parameters as for `generate_log_mesage` are passed.
 	:type logfunction: function
 	:param lazy: if True, `function` returns the actual logging function
 	:type lazy: bool
 	:param advanced: if True, pass the details to `function`, if False only pass the generated message to `function`
 	:type advanced: bool
-	:param template: If `advanced` is False, the message to be logged. The following place holders will be replaced:
-		- %(traceback)s: the traceback to the exception
-		- %(funcname)s: the name of the function in which the exception occurred
-		- %(args)s: the arguments to the function
-		- %(kwargs)s: the keyword arguments to the function
-		- %(argsview)s: args and kwargs in one line, separated by ', ' and kwargs in key=value form
-		- %(sourceview)s: the source code of the function
+	:param template: If `advanced` is False, the message to be logged. See `generate_log_message` for a list of place
+	holders that are replaced.
 	:type template: str
 	:param reraise: If set to False, do not re-raise the exception, but only log it. default: True
 	:type reraise: bool
@@ -195,7 +236,7 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 	:type catchall: bool
 	:param view_source: if True, include the source code of the failed function if possible
 	:type view_source: bool
-	'''
+	"""
 	if wrapped_f is not None:
 		if catchall:
 			# noinspection PyBroadException,PyDocstring
