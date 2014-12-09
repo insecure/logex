@@ -229,7 +229,7 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 	:param template: If `advanced` is False, the message to be logged. See `generate_log_message` for a list of place
 	holders that are replaced.
 	:type template: str
-	:param reraise: If set to False, do not re-raise the exception, but only log it. default: True
+	:param reraise: If set to False, do not re-raise the exception, but only log it. This does not resume the function!
 	:type reraise: bool
 	:param catchall: if True, also handle KeyboardInterrupt/SystemExit/GeneratorExit, i.e. log and only reraise if
 	specified

@@ -29,13 +29,17 @@
 from __future__ import (division, absolute_import, print_function, unicode_literals)
 
 import logging
+import threading
 
 import dbus
 import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 import logex
 
-from gi.repository.GObject import MainLoop
+try:
+	from gi.repository.GObject import MainLoop
+except ImportError:
+	MainLoop = None
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s %(levelname).5s %(filename)s(%(lineno)s): %(message)s")
@@ -44,78 +48,78 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
-logex.LOGFUNCTION = logging.debug
+logex.LOGFUNCTION = logging.critical
+
+BUS_NAME = 'org.logex_test.DBusTest'
+OBJECT_PATH = '/org/logex_test/DBusTest'
 
 def raise_exception():
 	raise Exception('raising exception')
 
 class DBusService(dbus.service.Object):
-	def __init__(self, bus, object_path='/com/logex_test/DBusTest'):
+	def __init__(self, bus, object_path=OBJECT_PATH):
 		super(DBusService, self).__init__(bus, object_path)
 
-	@dbus.service.method(dbus_interface='com.logex_test.DBusTest',
-					 in_signature='', out_signature='')
-	def do_something(self):
-		print("doing something")
-
-	@dbus.service.method(dbus_interface='com.logex_test.DBusTest',
-					 in_signature='', out_signature='')
-	def crash(self):
-		raise Exception('now crashing')
-
-	@dbus.service.method(dbus_interface='com.logex_test.DBusTest',
-					 in_signature='', out_signature='')
-	def catch_exception(self):
-		try:
-			raise Exception('now crashing')
-		except Exception as exc:
-			print('caught exception %s' % exc)
-
-	@dbus.service.method(dbus_interface='com.logex_test.DBusTest',
-					 in_signature='', out_signature='')
-	def dbus_in_dbus(self):
-		bus = dbus.SystemBus()
-		try:
-			nm = bus.get_object("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager")
-			nm.GetDeviceByIpIface("nathoesunth")
-		except Exception as exc:
-			print('Caught exception "%s".' % exc)
-
-	@logex.log(logfunction=logging.info, lazy=False, view_source=True)
-	@dbus.service.method(dbus_interface='com.logex_test.DBusTest',
+	@logex.log(view_source=True)
+	@dbus.service.method(dbus_interface=BUS_NAME,
 					 in_signature='isb', out_signature='')
-	def logexc(self, arg1, noch_ein_arg, lazy=True):
+	def crash(self, arg1, noch_ein_arg, lazy=True):
 		a = 1
 		print("lazy?: %s" % lazy)
 		raise_exception()
 
-def do_something(x):
+def do_something_and_crash(x):
 	x += 2
 	raise_exception()
 	print(x)
 
-@logex.log(logfunction=logging.info, lazy=False, view_source=True, reraise=False)
+@logex.log(view_source=True, reraise=False)
 def argstest(a, b=1):
 	print(" * argstest start")
 	c = 2
-	do_something(c)
+	do_something_and_crash(c)
 	x = c+2
 	print("x: %s" % x)
 	print(" * argstest done")
 	print("")
 
+class CrashingThread(threading.Thread):
+
+	def __init__(self):
+		super(CrashingThread, self).__init__(daemon=True)
+
+	@logex.log(reraise=False, view_source=True)
+	def run(self):
+		print(' -> in thread function')
+		print(' -> crashing now')
+		do_something_and_crash(123)
+		print(' -> done')
+
 def main():
 	argstest('blah', b=b'abc')
+	print('='*80)
 
-	DBusGMainLoop(set_as_default=True)
-	bus = dbus.SessionBus()
-	name = dbus.service.BusName('com.logex_test.DBusTest', bus)
-	service = DBusService(bus=bus)
+	t = CrashingThread()
+	t.start()
+	import time
+	time.sleep(1)
+	print('='*80)
 
-	loop = MainLoop()
-	loop.run()
+	if MainLoop is None:
+		print('pygobject not installed, skipping dbus demo')
+	else:
+		print('starting D-Bus service at %s' % BUS_NAME)
+		DBusGMainLoop(set_as_default=True)
+		bus = dbus.SessionBus()
+		name = dbus.service.BusName(BUS_NAME, bus)
+		service = DBusService(bus=bus)
+		print('call with: "dbus-send --session --print-reply --dest=%(busname)s %(object_path)s '
+			  '%(busname)s.crash int32:123 string:foo boolean:true"' %
+			  {'busname': BUS_NAME, 'object_path': OBJECT_PATH})
+
+		loop = MainLoop()
+		loop.run()
 
 
 if __name__ == '__main__':
-	print('call with: "dbus-send --session --print-reply --dest=com.logex_test.BaseExceptionDBusTest /com/logex_test/DBusTest com.logex_test.DBusTest.catch_exception"')
 	main()
