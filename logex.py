@@ -173,7 +173,7 @@ def generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
 			source = 'Error generating source view:\n%s' % traceback.format_exc()
 	else:
 		source = ''
-	if _is_method_of(func_name, args[0]):
+	if len(args) > 0 and _is_method_of(func_name, args[0]):
 		func_name = '%s.%s' % (args[0].__class__.__name__, func_name)
 		argsview = _generate_args_view(args[1:], kwargs)
 	else:
