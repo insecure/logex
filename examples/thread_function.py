@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 # Copyright (c) 2014, Tobias Hommel
 # All rights reserved.
@@ -30,16 +30,9 @@ from __future__ import (division, absolute_import, print_function, unicode_liter
 
 import logging
 import threading
+import time
 
-import dbus
-import dbus.service
-from dbus.mainloop.glib import DBusGMainLoop
 import logex
-
-try:
-	from gi.repository.GObject import MainLoop
-except ImportError:
-	MainLoop = None
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s %(levelname).5s %(filename)s(%(lineno)s): %(message)s")
@@ -50,43 +43,20 @@ logger.setLevel(logging.DEBUG)
 
 logex.LOGFUNCTION = logging.critical
 
-BUS_NAME = 'org.logex_test.DBusTest'
-OBJECT_PATH = '/org/logex_test/DBusTest'
 
 def raise_exception():
 	raise Exception('raising exception')
-
-class DBusService(dbus.service.Object):
-	def __init__(self, bus, object_path=OBJECT_PATH):
-		super(DBusService, self).__init__(bus, object_path)
-
-	@logex.log(view_source=True)
-	@dbus.service.method(dbus_interface=BUS_NAME,
-					 in_signature='isb', out_signature='')
-	def crash(self, arg1, noch_ein_arg, lazy=True):
-		a = 1
-		print("lazy?: %s" % lazy)
-		raise_exception()
 
 def do_something_and_crash(x):
 	x += 2
 	raise_exception()
 	print(x)
 
-@logex.log(view_source=True, reraise=False)
-def argstest(a, b=1):
-	print(" * argstest start")
-	c = 2
-	do_something_and_crash(c)
-	x = c+2
-	print("x: %s" % x)
-	print(" * argstest done")
-	print("")
-
 class CrashingThread(threading.Thread):
 
 	def __init__(self):
-		super(CrashingThread, self).__init__(daemon=True)
+		super(CrashingThread, self).__init__()
+		self.daemon = True
 
 	@logex.log(reraise=False, view_source=True)
 	def run(self):
@@ -96,29 +66,11 @@ class CrashingThread(threading.Thread):
 		print(' -> done')
 
 def main():
-	argstest('blah', b=b'abc')
-	print('='*80)
-
 	t = CrashingThread()
+	print('===== starting thread...')
 	t.start()
-	import time
 	time.sleep(1)
-	print('='*80)
-
-	if MainLoop is None:
-		print('pygobject not installed, skipping dbus demo')
-	else:
-		print('starting D-Bus service at %s' % BUS_NAME)
-		DBusGMainLoop(set_as_default=True)
-		bus = dbus.SessionBus()
-		name = dbus.service.BusName(BUS_NAME, bus)
-		service = DBusService(bus=bus)
-		print('call with: "dbus-send --session --print-reply --dest=%(busname)s %(object_path)s '
-			  '%(busname)s.crash int32:123 string:foo boolean:true"' %
-			  {'busname': BUS_NAME, 'object_path': OBJECT_PATH})
-
-		loop = MainLoop()
-		loop.run()
+	print('===== main function done, exiting...')
 
 
 if __name__ == '__main__':
