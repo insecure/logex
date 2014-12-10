@@ -144,7 +144,7 @@ def _is_method_of(func_name, class_object):
 	else:
 		return inspect.ismethod(attr)
 
-def generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
+def generate_log_message(template, args, kwargs, exc, view_source=None):
 	"""Generate a message based on a given template.
 
 	:param template: a template for the returned message, the following place holders will be replaced:
@@ -164,6 +164,8 @@ def generate_log_message(template, args, kwargs, exc, view_source=VIEW_SOURCE):
 	:type view_source: bool
 	:rtype: str
 	"""
+	if view_source is None:
+		view_source = VIEW_SOURCE
 	type_, value_, tb_ = exc
 	func_name = tb_.tb_frame.f_code.co_name
 	if view_source:
@@ -210,9 +212,8 @@ def _handle_log_exception(args, kwargs, logfunction, lazy, advanced, template, v
 		# noinspection PyCompatibility
 		raise
 
-def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
-		template=TEMPLATE, reraise=RERAISE, catchall=CATCHALL,
-		view_source=VIEW_SOURCE):
+def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=None,
+		reraise=None, catchall=None, view_source=None):
 	"""Decorator function that logs all unhandled exceptions in a function.
 	This is especially useful for thread functions in a daemon or functions which are used as D-Bus signal handlers.
 
@@ -237,6 +238,13 @@ def log(wrapped_f=None, logfunction=LOGFUNCTION, lazy=LAZY, advanced=ADVANCED,
 	:param view_source: if True, include the source code of the failed function if possible
 	:type view_source: bool
 	"""
+	if logfunction is None: logfunction = LOGFUNCTION
+	if lazy is None: lazy = LAZY
+	if advanced is None: advanced = ADVANCED
+	if template is None: template = TEMPLATE
+	if reraise is None: reraise = RERAISE
+	if catchall is None: catchall = CATCHALL
+	if view_source is None: view_source = VIEW_SOURCE
 	if wrapped_f is not None:
 		if catchall:
 			# noinspection PyBroadException,PyDocstring
