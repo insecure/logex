@@ -58,7 +58,7 @@ LAZY = False
 RERAISE = True
 CATCHALL = False
 VIEW_SOURCE = False
-DETECT_WRAPPED = True
+DETECT_NESTED = True
 
 _logger = logging.getLogger('logex')
 
@@ -245,7 +245,7 @@ def _handle_log_exception(args, kwargs, logfunction, lazy, advanced,
 		raise
 
 def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=None,
-		reraise=None, catchall=None, view_source=None, detect_wrapped=None):
+		reraise=None, catchall=None, view_source=None, detect_nested=None):
 	"""Decorator function that logs all unhandled exceptions in a function.
 	This is especially useful for thread functions in a daemon or functions which are used as D-Bus signal handlers.
 
@@ -269,9 +269,9 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 	:type catchall: bool
 	:param view_source: if True, include the source code of the failed function if possible
 	:type view_source: bool
-	:param detect_wrapped: if False, do not try to detect wrapped logex calls, i.e. if a method decorated by this
+	:param detect_nested: if False, do not try to detect wrapped logex calls, i.e. if a method decorated by this
 	function calls another method decorated by this function
-	:type detect_wrapped: bool
+	:type detect_nested: bool
 	"""
 	if logfunction is None: logfunction = LOGFUNCTION
 	if lazy is None: lazy = LAZY
@@ -280,7 +280,7 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 	if reraise is None: reraise = RERAISE
 	if catchall is None: catchall = CATCHALL
 	if view_source is None: view_source = VIEW_SOURCE
-	if detect_wrapped is None: detect_wrapped = DETECT_WRAPPED
+	if detect_nested is None: detect_nested = DETECT_NESTED
 	if wrapped_f is not None:
 		if catchall:
 			# noinspection PyBroadException,PyDocstring
@@ -288,7 +288,7 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 				try:
 					wrapped_f(*args, **kwargs)
 				except:
-					if detect_wrapped:
+					if detect_nested:
 						wrapper_code = wrapper_f.func_code
 					else:
 						wrapper_code = None
@@ -300,7 +300,7 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 				try:
 					wrapped_f(*args, **kwargs)
 				except Exception:
-					if detect_wrapped:
+					if detect_nested:
 						wrapper_code = wrapper_f.func_code
 					else:
 						wrapper_code = None
@@ -313,5 +313,5 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 			return log(wrapped_fn,
 					   logfunction=logfunction, lazy=lazy, advanced=advanced,
 					   template=template, reraise=reraise, catchall=catchall,
-					   view_source=view_source, detect_wrapped=detect_wrapped)
+					   view_source=view_source, detect_nested=detect_nested)
 		return arg_wrapper
