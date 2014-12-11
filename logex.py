@@ -289,7 +289,12 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 					wrapped_f(*args, **kwargs)
 				except:
 					if detect_nested:
-						wrapper_code = wrapper_f.func_code
+						try:
+							# noinspection PyUnresolvedReferences
+							wrapper_code = wrapper_f.func_code
+						except AttributeError:
+							# noinspection PyUnresolvedReferences
+							wrapper_code = wrapper_f.__code__
 					else:
 						wrapper_code = None
 					_handle_log_exception(args, kwargs, logfunction, lazy, advanced,
@@ -301,7 +306,12 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 					wrapped_f(*args, **kwargs)
 				except Exception:
 					if detect_nested:
-						wrapper_code = wrapper_f.func_code
+						try:
+							# noinspection PyUnresolvedReferences
+							wrapper_code = wrapper_f.func_code
+						except AttributeError:
+							# noinspection PyUnresolvedReferences
+							wrapper_code = wrapper_f.__code__
 					else:
 						wrapper_code = None
 					_handle_log_exception(args, kwargs, logfunction, lazy, advanced,
