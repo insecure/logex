@@ -134,7 +134,12 @@ def _generate_source_view(tb, wrapper_code):
 
 def _generate_locals_view(frame):
 	arginfo = inspect.getargvalues(frame)
-	frame_locals = ['* %s: %r' % item for item in sorted(arginfo.locals.items())]
+	frame_locals = []
+	for item in sorted(arginfo.locals.items()):
+		try:
+			frame_locals.append('* %s: %r' % item)
+		except Exception:
+			frame_locals.append('* !!! could not get information for local at 0x%x !!!' % id(item))
 	return '\n'.join(frame_locals)
 
 def _generate_args_view(args, kwargs):
