@@ -1,2 +1,3 @@
+include Changelog
 recursive-include examples *.py
 exclude examples/logex.py

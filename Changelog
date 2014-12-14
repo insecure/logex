@@ -1,3 +1,8 @@
+logex 2.1.0 (2014-12-14)
+ * fix exception when generating locals view, i.e. if repr(local_variable)
+   crashes
+ * add a wrapper function that allows to use logex with sys.excepthook
+
 logex 2.0.0 (2014-12-07)
  * whew! many changes ;)
  * removed LINE_NUMBERS parameter => always show line numbers when showing

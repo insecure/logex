@@ -1,17 +1,22 @@
 logex
 =====
 
-A python module to easily add logging for unhandled exceptions in D-Bus, thread
-and other functions.
+.. contents::
+
+Logex is a python module to easily add logging for unhandled exceptions in
+D-Bus, thread and other functions.
+It can also be quite helpful when developing with the new asyncio module of
+python 3.4. Although this module does some sort of exception logging, it can
+easily happen that exceptions are accidentally swallowed.
 Although unhandled exceptions get written to STDERR by default and most modules
 provide some mechanism to log these, this is not always sufficient, e.g. when
 inside a daemon which discards all default output.
 Sometimes it may also be desirable to automatically send an email if some
 exception occurs or at least write some kind of audit log.
 
-It comes with a decorator function which can be applied on demand. It provides
-advanced debugging information which gives you the most relevant information
-for each frame in the exception's traceback.
+This modlue comes with a decorator function which can be applied on demand. It
+provides advanced debugging information which gives you the most relevant
+information for each frame in the exception's traceback.
 
 ========
 Settings
