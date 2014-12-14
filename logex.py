@@ -219,11 +219,15 @@ def generate_log_message(template, args, kwargs, exc, wrapper_code=None, view_so
 	}
 
 def _handle_log_exception(args, kwargs, logfunction, lazy, advanced,
-						  template, view_source, reraise, wrapper_code=None, strip=1):
+						  template, view_source, reraise,
+						  wrapper_code=None, strip=1, exc=None):
 	# noinspection PyBroadException
 	try:
 		logf = logfunction() if lazy else logfunction
-		type_, value_, tb_ = sys.exc_info()
+		if exc is None:
+			type_, value_, tb_ = sys.exc_info()
+		else:
+			type_, value_, tb_ = exc
 		for i in range(strip):
 			if tb_.tb_next is None:
 				break
@@ -330,3 +334,17 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 					   template=template, reraise=reraise, catchall=catchall,
 					   view_source=view_source, detect_nested=detect_nested)
 		return arg_wrapper
+
+def excepthook(type_, value_, traceback_):
+	"""A wrapper that can be used as sys.excepthook."""
+	_handle_log_exception((), {}, LOGFUNCTION, LAZY, ADVANCED,
+							TEMPLATE, VIEW_SOURCE, False,
+							exc=(type_, value_, traceback_))
+
+def install_excepthook():
+	"""Set the global excepthook which is called if an unhandled exception is raised in the main thread."""
+	sys.excepthook = excepthook
+
+def uninstall_excepthook():
+	"""Restore the original excepthook."""
+	sys.excepthook = sys.__excepthook__
