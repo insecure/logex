@@ -47,7 +47,7 @@ import traceback
 import functools
 import sys
 
-__version__ = '2.0.0'
+__version__ = '2.1.1'
 
 LOGFUNCTION = logging.error
 TEMPLATE = ('Unhandled exception calling %(funcname)s(%(argsview)s):\n'
@@ -295,7 +295,7 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 			# noinspection PyBroadException,PyDocstring
 			def wrapper_f(*args, **kwargs):
 				try:
-					wrapped_f(*args, **kwargs)
+					return wrapped_f(*args, **kwargs)
 				except:
 					if detect_nested:
 						try:
@@ -312,7 +312,7 @@ def log(wrapped_f=None, logfunction=None, lazy=None, advanced=None, template=Non
 			# noinspection PyBroadException,PyDocstring
 			def wrapper_f(*args, **kwargs):
 				try:
-					wrapped_f(*args, **kwargs)
+					return wrapped_f(*args, **kwargs)
 				except Exception:
 					if detect_nested:
 						try:

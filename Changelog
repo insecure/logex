@@ -1,3 +1,6 @@
+logex 2.1.1 (2015-05-02)
+ * fix: return value of decorated function was not passed to caller
+
 logex 2.1.0 (2014-12-14)
  * fix exception when generating locals view, i.e. if repr(local_variable)
    crashes

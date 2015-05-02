@@ -11,7 +11,7 @@ def read(fname):
 
 setup(
     name='logex',
-    version='2.1.0',
+    version='2.1.1',
     description='Easily log uncaught exceptions in D-Bus, thread and other functions.',
 	url='https://github.com/insecure/logex',
 	author='Tobias Hommel',
